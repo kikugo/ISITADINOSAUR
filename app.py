@@ -91,21 +91,38 @@ personalities = {
 def load_dino_facts(filename="dino_facts.txt"):
     """Loads dinosaur facts from a text file."""
     try:
-        with open(filename, "r", encoding="utf-8") as f:  # Use utf-8 encoding
-            facts = [line.strip() for line in f if line.strip()] #remove empty lines
+        with open(filename, "r", encoding="utf-8") as f:
+            facts = [line.strip() for line in f if line.strip()]
         return facts
     except FileNotFoundError:
-        st.error(f"Error: Could not find the fact file: {filename}") #error handling
-        return [] #return empty list
+        st.error(f"Error: Could not find the fact file: {filename}")
+        return []
+
+# --- Scene Analysis Function ---
+@st.cache_data #cache this
+def analyze_scene(image):
+    """Analyzes the scene to extract keywords."""
+    model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
+    prompt = "Briefly describe the main elements of this scene. Focus on the general setting (e.g., forest, beach, room, city) and any prominent objects. Keep it short, around 5-10 words."
+    response = model.generate_content([prompt, image])
+    response.resolve()
+    return response.text
+
+# --- Keyword Extraction Function ---
+def extract_keywords(scene_description):
+    """Extracts keywords from the scene description."""
+    # Simple keyword extraction (can be improved with more sophisticated NLP)
+    keywords = scene_description.lower().split()  # Lowercase and split into words
+    # Filter out common words
+    stop_words = {"the", "a", "an", "in", "on", "at", "of", "is", "it", "and", "this", "that", "with", "to"}
+    keywords = [word for word in keywords if word not in stop_words and len(word) > 3] #filter
+    return keywords[:3]  # Return the first 3 keywords
 
 # --- UI Elements ---
 generated_prompts = generate_prompts()
-dino_facts = load_dino_facts()  # Load the facts
+dino_facts = load_dino_facts()
 
 selected_personality = st.selectbox("Choose a dinosaur personality:", list(personalities.keys()))
-
-chosen_base_prompt = random.choice(generated_prompts)
-prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt}"
 
 file = st.file_uploader("Upload an image to check for dinosaurs.", type=["jpg", "jpeg", "png", "webp"])
 play_sound = st.checkbox("Play sound effect", value=True)
@@ -121,10 +138,25 @@ with img:
 
 with result:
     st.info('Dinosaur Detection Results', icon="ℹ️")
-    st.write(f"Using prompt: *{prompt_choice}*")
 
     if file is not None:
-        model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
+        # --- Analyze the Scene and Extract Keywords ---
+        scene_description = analyze_scene(image)
+        keywords = extract_keywords(scene_description)
+        keyword_phrase = ", ".join(keywords)  # Join keywords into a phrase
+
+        # --- Construct the Final Prompt ---
+        chosen_base_prompt = random.choice(generated_prompts)
+        # Inject keywords into the base prompt
+        if keywords:
+           prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt.replace('image', f'image showing {keyword_phrase}')}"
+        else: #if no keywords
+           prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt}"
+
+
+        st.write(f"Using prompt: *{prompt_choice}*")
+
+        model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings) # Moved inside to avoid unnecessary initializations
         response = model.generate_content([prompt_choice, image], stream=True)
         response.resolve()
 
@@ -134,10 +166,9 @@ with result:
         if play_sound:
             st.audio("static/sounds/roar.mp3")
 
-        # --- Display a Random Fact ---
-        if dino_facts: #check if not empty
+        if dino_facts:
           random_fact = random.choice(dino_facts)
-          st.write("---")  # Separator line
+          st.write("---")
           st.info(f"Dinosaur Fact: {random_fact}", icon="🦖")
 
     # --- User Caption Input ---
