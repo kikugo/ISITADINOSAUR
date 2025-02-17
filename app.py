@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import os
 import google.generativeai as genai
 import PIL.Image
-import random  # Import the random module
+import random
 
 load_dotenv()
 
@@ -43,11 +43,11 @@ st.header("ISITADINOSAUR", divider='rainbow')
 st.markdown('_Is it Jurassic or just a pic?  Let our image checker decide!_')
 
 # --- Prompt Generation Function ---
-@st.cache_data  # Cache the generated prompts
+@st.cache_data
 def generate_prompts(num_prompts=5):
     """Generates new prompts using Gemini."""
 
-    model = genai.GenerativeModel('gemini-pro') #Use gemini pro, not vision
+    model = genai.GenerativeModel('gemini-pro')
 
     meta_prompt = """
     You are a creative prompt generator for an image analysis app called "ISITADINOSAUR".
@@ -69,21 +69,30 @@ def generate_prompts(num_prompts=5):
     Now, generate {} new, distinct prompts for the ISITADINOSAUR app.
     """.format(num_prompts)
 
-
     response = model.generate_content(meta_prompt)
-    # Split the response into individual prompts.  This assumes each prompt is on a new line.
-    #   This is a simple approach; more robust parsing might be needed
-    #   depending on Gemini's output.
     prompts = response.text.strip().split("\n")
-    prompts = [p.strip('*- ') for p in prompts if p.strip()] #clean up
+    prompts = [p.strip('*- ') for p in prompts if p.strip()]
     return prompts
 
-# --- UI Elements ---
-# Generate prompts (this will only happen once due to caching)
-generated_prompts = generate_prompts()
+# --- Dinosaur Personalities ---
+personalities = {
+    "Grumpy T-Rex": "Analyze the image as if a grumpy T-Rex were commenting on it. Be sarcastic and unimpressed.",
+    "Silly Stegosaurus": "Describe the image from the perspective of a very silly Stegosaurus. Be playful and nonsensical.",
+    "Philosophical Triceratops": "Analyze the image as if a philosophical Triceratops were pondering its meaning. Be thoughtful and introspective.",
+    "Excited Velociraptor": "Describe the image as if a very excited Velociraptor just saw it. Be energetic and enthusiastic.",
+    "Sleepy Brontosaurus": "Analyze this image like a sleepy Brontosaurus, be slow and descriptive."
+}
 
-#Instead of selectbox, choose prompt at random
-prompt_choice = random.choice(generated_prompts)
+# --- UI Elements ---
+generated_prompts = generate_prompts()  # Get dynamically generated prompts
+
+# User selects personality
+selected_personality = st.selectbox("Choose a dinosaur personality:", list(personalities.keys()))
+
+# Combine personality with a random prompt
+chosen_base_prompt = random.choice(generated_prompts)
+prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt}"
+
 
 file = st.file_uploader("Upload an image to check for dinosaurs.", type=["jpg", "jpeg", "png", "webp"])
 play_sound = st.checkbox("Play sound effect", value=True)
@@ -99,7 +108,7 @@ with img:
 
 with result:
     st.info('Dinosaur Detection Results', icon="ℹ️")
-    st.write(f"Using prompt: *{prompt_choice}*")  # Show the selected prompt
+    st.write(f"Using prompt: *{prompt_choice}*")  # Show the combined prompt
 
     if file is not None:
         model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
