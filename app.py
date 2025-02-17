@@ -99,7 +99,7 @@ def load_dino_facts(filename="dino_facts.txt"):
         return []
 
 # --- Scene Analysis Function ---
-@st.cache_data #cache this
+@st.cache_data
 def analyze_scene(image):
     """Analyzes the scene to extract keywords."""
     model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
@@ -111,21 +111,24 @@ def analyze_scene(image):
 # --- Keyword Extraction Function ---
 def extract_keywords(scene_description):
     """Extracts keywords from the scene description."""
-    # Simple keyword extraction (can be improved with more sophisticated NLP)
-    keywords = scene_description.lower().split()  # Lowercase and split into words
-    # Filter out common words
+    keywords = scene_description.lower().split()
     stop_words = {"the", "a", "an", "in", "on", "at", "of", "is", "it", "and", "this", "that", "with", "to"}
-    keywords = [word for word in keywords if word not in stop_words and len(word) > 3] #filter
-    return keywords[:3]  # Return the first 3 keywords
+    keywords = [word for word in keywords if word not in stop_words and len(word) > 3]
+    return keywords[:3]
 
 # --- UI Elements ---
 generated_prompts = generate_prompts()
 dino_facts = load_dino_facts()
 
-selected_personality = st.selectbox("Choose a dinosaur personality:", list(personalities.keys()))
+# Add the "Serious Mode" checkbox
+serious_mode = st.checkbox("Serious Mode (Detect Objects)")
+
+# Only show personality selection if NOT in serious mode
+if not serious_mode:
+    selected_personality = st.selectbox("Choose a dinosaur personality:", list(personalities.keys()))
 
 file = st.file_uploader("Upload an image to check for dinosaurs.", type=["jpg", "jpeg", "png", "webp"])
-play_sound = st.checkbox("Play sound effect", value=True)
+play_sound = st.checkbox("Play sound effect", value=True) #Keep this option
 user_captions = []
 
 img, result = st.columns(2)
@@ -137,47 +140,55 @@ with img:
         st.image(file, width=350)
 
 with result:
-    st.info('Dinosaur Detection Results', icon="ℹ️")
+    st.info('Dinosaur Detection Results', icon="ℹ️")  # Keep this title in both modes
 
     if file is not None:
-        # --- Analyze the Scene and Extract Keywords ---
-        scene_description = analyze_scene(image)
-        keywords = extract_keywords(scene_description)
-        keyword_phrase = ", ".join(keywords)  # Join keywords into a phrase
+        if serious_mode:
+            # --- Serious Mode Logic ---
+            model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
+            response = model.generate_content(["Identify the main objects visible in this image.", image], stream=True)
+            response.resolve()
+            st.write("Detected Objects:")
+            for chunk in response:
+                st.write(chunk.text)
 
-        # --- Construct the Final Prompt ---
-        chosen_base_prompt = random.choice(generated_prompts)
-        # Inject keywords into the base prompt
-        if keywords:
-           prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt.replace('image', f'image showing {keyword_phrase}')}"
-        else: #if no keywords
-           prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt}"
+        else:
+            # --- Humorous Mode Logic (Existing Code) ---
+            scene_description = analyze_scene(image)
+            keywords = extract_keywords(scene_description)
+            keyword_phrase = ", ".join(keywords)
 
+            chosen_base_prompt = random.choice(generated_prompts)
+            if keywords:
+                prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt.replace('image', f'image showing {keyword_phrase}')}"
+            else:
+                prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt}"
 
-        st.write(f"Using prompt: *{prompt_choice}*")
+            st.write(f"Using prompt: *{prompt_choice}*")
 
-        model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings) # Moved inside to avoid unnecessary initializations
-        response = model.generate_content([prompt_choice, image], stream=True)
-        response.resolve()
+            model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
+            response = model.generate_content([prompt_choice, image], stream=True)
+            response.resolve()
 
-        for chunk in response:
-            st.write(chunk.text)
+            for chunk in response:
+                st.write(chunk.text)
 
-        if play_sound:
-            st.audio("static/sounds/roar.mp3")
+            if play_sound:
+                st.audio("static/sounds/roar.mp3") #Keep the sound option
 
-        if dino_facts:
-          random_fact = random.choice(dino_facts)
-          st.write("---")
-          st.info(f"Dinosaur Fact: {random_fact}", icon="🦖")
+            if dino_facts:
+                random_fact = random.choice(dino_facts)
+                st.write("---")
+                st.info(f"Dinosaur Fact: {random_fact}", icon="🦖")
 
-    # --- User Caption Input ---
-    user_caption = st.text_area("Enter your own funny caption:", key="user_caption")
-    if user_caption:
-        user_captions.append(user_caption)
-        st.write("Your caption has been added!")
+    # --- User Caption Input (Keep this outside the conditional) ---
+    if not serious_mode: #only allow when not in serious mode
+        user_caption = st.text_area("Enter your own funny caption:", key="user_caption")
+        if user_caption:
+            user_captions.append(user_caption)
+            st.write("Your caption has been added!")
 
-    if user_captions:
-        st.subheader("User-Submitted Captions:")
-        for caption in user_captions:
-            st.write(f"- {caption}")
+        if user_captions:
+            st.subheader("User-Submitted Captions:")
+            for caption in user_captions:
+                st.write(f"- {caption}")
