@@ -31,7 +31,7 @@ st.markdown('_Is it Jurassic or just a pic? Let our image checker decide!_')
 async def generate_prompts(num_prompts=5):
     """Generates new prompts using Gemini (asynchronously)."""
 
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-2.0-flash-lite-preview-02-05')
 
     meta_prompt = """
     You are a creative prompt generator for an image analysis app called "ISITADINOSAUR".
@@ -122,7 +122,7 @@ async def run_app():
 
         if file is not None:
             if serious_mode:
-                model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
+                model = genai.GenerativeModel('gemini-2.0-flash', safety_settings=safety_settings)
                 response = await model.generate_content_async(["Identify the main objects visible in this image.", image], stream=True)
                 st.write("Detected Objects:")
                 async for chunk in response:
@@ -141,7 +141,7 @@ async def run_app():
 
                 st.write(f"Using prompt: *{prompt_choice}*")
 
-                model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
+                model = genai.GenerativeModel('gemini-2.0-flash', safety_settings=safety_settings)
                 response = await model.generate_content_async([prompt_choice, image], stream=True)
 
                 async for chunk in response:
