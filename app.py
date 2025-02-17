@@ -76,23 +76,36 @@ def generate_prompts(num_prompts=5):
 
 # --- Dinosaur Personalities ---
 personalities = {
-    "Grumpy T-Rex": "Analyze the image as if a grumpy T-Rex were commenting on it. Be sarcastic and unimpressed.",
-    "Silly Stegosaurus": "Describe the image from the perspective of a very silly Stegosaurus. Be playful and nonsensical.",
-    "Philosophical Triceratops": "Analyze the image as if a philosophical Triceratops were pondering its meaning. Be thoughtful and introspective.",
-    "Excited Velociraptor": "Describe the image as if a very excited Velociraptor just saw it. Be energetic and enthusiastic.",
-    "Sleepy Brontosaurus": "Analyze this image like a sleepy Brontosaurus, be slow and descriptive."
+    "Grumpy T-Rex (Rex)": "Analyze this image as if you are Rex, a perpetually grumpy Tyrannosaurus Rex. You're easily annoyed, find everything inconvenient, and have a very short temper. Complain about everything you see, use short, sharp sentences, and be as sarcastic as possible. Nothing pleases you.",
+    "Silly Stegosaurus (Stella)": "Describe this image from the perspective of Stella, a Stegosaurus who is incredibly silly and easily distracted. Use lots of made-up words, giggle frequently (write out 'hehe' or 'teehee'), and get sidetracked by shiny things. Your thoughts should be a jumbled, playful mess.",
+    "Philosophical Triceratops (Terry)": "Analyze this image as if you are Terry, a Triceratops who loves to ponder the deeper meaning of everything.  Be thoughtful and introspective. Use metaphors and analogies.  Ask existential questions about the image, even if it's just a picture of a rock. Wonder about the nature of existence.",
+    "Excited Velociraptor (Valerie)": "Describe this image as if Valerie, a hyperactive Velociraptor, just spotted it.  You're incredibly enthusiastic and easily excited. Use lots of exclamation points!!! Talk very fast, jump from one idea to the next, and imagine all the exciting (and possibly dangerous) things that *could* be happening in the image.",
+    "Sleepy Brontosaurus (Barry)": "Analyze this image as if you are Barry, a Brontosaurus who is perpetually sleepy.  Speak... very... slowly... Use... lots... of... ellipses...  Describe things in a drawn-out, languid way.  Mention how tired you are and how much you'd like to take a nap.",
+    "Professor Pterodactyl (Percy)": "Analyze the image as Professor Percy Pterodactyl, a very knowledgeable but slightly pompous paleontologist. Use precise, scientific-sounding language (even if it's humorous), correct any perceived inaccuracies, and offer long-winded explanations. Be a bit of a know-it-all.",
+    "Anxious Ankylosaurus (Andy)": "Describe this image from the perspective of Andy, an Ankylosaurus who is constantly worried about everything. Be extremely cautious, point out all the potential dangers, and express your anxieties about what might happen. Overthink everything.",
+    "Diva Diplodocus (Diana)": "Analyze the image as Diana, a Diplodocus who is a complete diva. You're obsessed with your appearance, very dramatic, and consider yourself incredibly important. Comment on the image's aesthetic qualities (or lack thereof) and relate everything back to yourself."
 }
 
-# --- UI Elements ---
-generated_prompts = generate_prompts()  # Get dynamically generated prompts
+# --- Fact Loading Function ---
+@st.cache_data
+def load_dino_facts(filename="dino_facts.txt"):
+    """Loads dinosaur facts from a text file."""
+    try:
+        with open(filename, "r", encoding="utf-8") as f:  # Use utf-8 encoding
+            facts = [line.strip() for line in f if line.strip()] #remove empty lines
+        return facts
+    except FileNotFoundError:
+        st.error(f"Error: Could not find the fact file: {filename}") #error handling
+        return [] #return empty list
 
-# User selects personality
+# --- UI Elements ---
+generated_prompts = generate_prompts()
+dino_facts = load_dino_facts()  # Load the facts
+
 selected_personality = st.selectbox("Choose a dinosaur personality:", list(personalities.keys()))
 
-# Combine personality with a random prompt
 chosen_base_prompt = random.choice(generated_prompts)
 prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt}"
-
 
 file = st.file_uploader("Upload an image to check for dinosaurs.", type=["jpg", "jpeg", "png", "webp"])
 play_sound = st.checkbox("Play sound effect", value=True)
@@ -108,7 +121,7 @@ with img:
 
 with result:
     st.info('Dinosaur Detection Results', icon="ℹ️")
-    st.write(f"Using prompt: *{prompt_choice}*")  # Show the combined prompt
+    st.write(f"Using prompt: *{prompt_choice}*")
 
     if file is not None:
         model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
@@ -120,6 +133,12 @@ with result:
 
         if play_sound:
             st.audio("static/sounds/roar.mp3")
+
+        # --- Display a Random Fact ---
+        if dino_facts: #check if not empty
+          random_fact = random.choice(dino_facts)
+          st.write("---")  # Separator line
+          st.info(f"Dinosaur Fact: {random_fact}", icon="🦖")
 
     # --- User Caption Input ---
     user_caption = st.text_area("Enter your own funny caption:", key="user_caption")
