@@ -11,39 +11,22 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=GOOGLE_API_KEY)
 
+# Safety settings to block harmful content (all categories set to BLOCK_NONE for demonstration, adjust as needed)
 safety_settings = [
-    {
-        "category": "HARM_CATEGORY_DANGEROUS",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE",
-    },
+    {"category": cat, "threshold": "BLOCK_NONE"} for cat in [
+        "HARM_CATEGORY_DANGEROUS", "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH",
+        "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"
+    ]
 ]
 
-st.set_page_config(
-    page_title="ISITADINOSAUR",
-    layout="centered"
-)
+st.set_page_config(page_title="ISITADINOSAUR", layout="centered")
 
 st.image('static/dino-logo.png', width=100)
 st.header("ISITADINOSAUR", divider='rainbow')
-st.markdown('_Is it Jurassic or just a pic?  Let our image checker decide!_')
+st.markdown('_Is it Jurassic or just a pic? Let our image checker decide!_')
 
-# --- Prompt Generation Function (Now Asynchronous) ---
+# --- Prompt Generation Function (Asynchronous and Cached) ---
+
 @st.cache_data
 async def generate_prompts(num_prompts=5):
     """Generates new prompts using Gemini (asynchronously)."""
@@ -87,106 +70,100 @@ personalities = {
     "Diva Diplodocus (Diana)": "Analyze the image as Diana, a Diplodocus who is a complete diva. You're obsessed with your appearance, very dramatic, and consider yourself incredibly important. Comment on the image's aesthetic qualities (or lack thereof) and relate everything back to yourself."
 }
 
-# --- Fact Loading Function --- (No Changes)
+# --- Fact Loading Function (Cached) ---
 @st.cache_data
 def load_dino_facts(filename="dino_facts.txt"):
-    """Loads dinosaur facts from a text file."""
+    """Loads dinosaur facts from a text file, handling potential errors."""
     try:
         with open(filename, "r", encoding="utf-8") as f:
-            facts = [line.strip() for line in f if line.strip()]
-        return facts
+            return [line.strip() for line in f if line.strip()]
     except FileNotFoundError:
         st.error(f"Error: Could not find the fact file: {filename}")
         return []
 
-# --- Scene Analysis Function (Now Asynchronous) ---
+# --- Scene Analysis Function (Asynchronous and Cached) ---
 @st.cache_data
 async def analyze_scene(image):
-    """Analyzes the scene to extract keywords (asynchronously)."""
+    """Analyzes the image to extract keywords describing the scene."""
     model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
-    prompt = "Briefly describe the main elements of this scene..."
-    response = await model.generate_content_async([prompt, image]) # Use generate_content_async
+    prompt = "Briefly describe the main elements of this scene (e.g., forest, beach, room). Keep it short, 5-10 words."
+    response = await model.generate_content_async([prompt, image])
     return response.text
 
-# --- Keyword Extraction Function --- (No Changes)
+# --- Keyword Extraction Function ---
 def extract_keywords(scene_description):
-    """Extracts keywords from the scene description."""
+    """Extracts up to 3 relevant keywords from a scene description."""
     keywords = scene_description.lower().split()
     stop_words = {"the", "a", "an", "in", "on", "at", "of", "is", "it", "and", "this", "that", "with", "to"}
-    keywords = [word for word in keywords if word not in stop_words and len(word) > 3]
-    return keywords[:3]
+    return [word for word in keywords if word not in stop_words and len(word) > 3][:3]
 
-# --- Main App Logic (Now Asynchronous) ---
-async def run_app():  # Wrap the main logic in an async function
-    generated_prompts = await generate_prompts() #await
+# --- Main App Logic (Asynchronous) ---
+async def run_app():
+    generated_prompts = await generate_prompts()
     dino_facts = load_dino_facts()
 
     serious_mode = st.checkbox("Serious Mode (Detect Objects)")
-
-    if not serious_mode:
-        selected_personality = st.selectbox("Choose a dinosaur personality:", list(personalities.keys()))
+    selected_personality = st.selectbox("Choose a dinosaur personality:", list(personalities.keys())) if not serious_mode else None
 
     file = st.file_uploader("Upload an image to check for dinosaurs.", type=["jpg", "jpeg", "png", "webp"])
     play_sound = st.checkbox("Play sound effect", value=True)
     user_captions = []
 
-    img, result = st.columns(2)
+    img, result_col = st.columns(2) # Consistent variable naming
 
     with img:
         st.info('Uploaded Image', icon="ℹ️")
         if file is not None:
             image = PIL.Image.open(file)
-            st.image(file, width=350)
+            st.image(image, width=350)  # Pass the PIL Image object
 
-    with result:
+    with result_col:
         st.info('Dinosaur Detection Results', icon="ℹ️")
 
         if file is not None:
             if serious_mode:
                 model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
-                response = await model.generate_content_async(["Identify the main objects visible in this image.", image], stream=True) # Use generate_content_async
+                response = await model.generate_content_async(["Identify the main objects visible in this image.", image], stream=True)
                 st.write("Detected Objects:")
-
-                async for chunk in response: #async for loop
+                async for chunk in response:
                     st.write(chunk.text)
 
             else:
-                scene_description = await analyze_scene(image) #await
+                scene_description = await analyze_scene(image)
                 keywords = extract_keywords(scene_description)
                 keyword_phrase = ", ".join(keywords)
 
                 chosen_base_prompt = random.choice(generated_prompts)
-                if keywords:
-                    prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt.replace('image', f'image showing {keyword_phrase}')}"
-                else:
-                    prompt_choice = f"{personalities[selected_personality]} {chosen_base_prompt}"
+                prompt_choice = (
+                    f"{personalities[selected_personality]} {chosen_base_prompt.replace('image', f'image showing {keyword_phrase}')}"
+                    if keywords else f"{personalities[selected_personality]} {chosen_base_prompt}"
+                )
 
                 st.write(f"Using prompt: *{prompt_choice}*")
 
                 model = genai.GenerativeModel('gemini-pro-vision', safety_settings=safety_settings)
-                response = await model.generate_content_async([prompt_choice, image], stream=True) # Use generate_content_async
+                response = await model.generate_content_async([prompt_choice, image], stream=True)
 
-                async for chunk in response: #async for loop
+                async for chunk in response:
                     st.write(chunk.text)
 
                 if play_sound:
                     st.audio("static/sounds/roar.mp3")
 
                 if dino_facts:
-                    random_fact = random.choice(dino_facts)
                     st.write("---")
-                    st.info(f"Dinosaur Fact: {random_fact}", icon="🦖")
-        if not serious_mode:
-            user_caption = st.text_area("Enter your own funny caption:", key="user_caption")
-            if user_caption:
-                user_captions.append(user_caption)
-                st.write("Your caption has been added!")
+                    st.info(f"Dinosaur Fact: {random.choice(dino_facts)}", icon="🦖")
 
-            if user_captions:
-                st.subheader("User-Submitted Captions:")
-                for caption in user_captions:
-                    st.write(f"- {caption}")
+            if not serious_mode:
+                user_caption = st.text_area("Enter your own funny caption:", key="user_caption")
+                if user_caption:
+                    user_captions.append(user_caption)
+                    st.write("Your caption has been added!")
 
-# --- Run the App (Using asyncio.run) ---
+                if user_captions:
+                    st.subheader("User-Submitted Captions:")
+                    for caption in user_captions:
+                        st.write(f"- {caption}")
+
 if __name__ == "__main__":
-    asyncio.run(run_app()) #changed
+    asyncio.run(run_app())
